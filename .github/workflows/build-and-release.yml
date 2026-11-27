@@ -21,7 +21,7 @@ on:
       release_version:
         description: 'Release Tag/Version (e.g. v1.0.19)'
         required: false
-        default: 'v1.0.19'
+        default: 'v1.1.0-beta.2'
 
 permissions:
   contents: write
@@ -69,16 +69,26 @@ jobs:
           export LLVM_CONFIG=/usr/bin/llvm-config-18
           export PATH="/opt/ps5-payload-sdk/bin:/usr/lib/llvm-18/bin:${PATH}"
 
-          TAG_OR_VER="v1.0.19"
+          # Version bestimmen: Tag-Push > manuell eingegebene Version (Run workflow) > Fallback.
+          # Wichtig: Beim manuellen Start (workflow_dispatch) wurde frueher der Fallback
+          # genommen, wodurch die ELF faelschlich "..._v1.0.19.elf" hiess, obwohl das
+          # Release eine andere Version bekam.
+          TAG_OR_VER="${{ inputs.release_version }}"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG_OR_VER="${GITHUB_REF#refs/tags/}"
           fi
+          if [[ -z "${TAG_OR_VER}" ]]; then
+            TAG_OR_VER="v1.1.0-beta.2"
+          fi
+          echo "Baue Version: ${TAG_OR_VER}"
 
           make clean
           make VERSION="${TAG_OR_VER}"
 
+          # Nur die fertige Loader-ELF ins Release, nicht das Zwischen-Payload
+          # (overlay_payload.elf darf nicht an die Konsole gesendet werden).
           mkdir -p dist
-          cp bin/*.elf dist/
+          cp bin/ps5-overlay-kus_*.elf dist/
 
           cd dist
           sha256sum *.elf > SHA256SUMS.txt
