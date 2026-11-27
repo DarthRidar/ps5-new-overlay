@@ -505,7 +505,7 @@ input[type="range"]::-webkit-slider-thumb {
     </div>
     <div class="status-pill">
       <span class="status-dot"></span>
-      <span>PS5 ShellUI (v1.1.0-beta.1)</span>
+      <span>PS5 ShellUI (v1.1.0-beta.2)</span>
     </div>
   </div>
 
