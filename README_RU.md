@@ -141,11 +141,11 @@ port = 8585
 [metrics]
 order = fps,cpu,load,cclk,gpu,gclk,ram,vram,ssd,fan,pwr,ip
 
-[metric_fps]
+[fps]
 enabled = true
 color = #FFEB3B
 
-[metric_ssd]
+[ssd]
 enabled = true
 color = #00E5FF
 ...

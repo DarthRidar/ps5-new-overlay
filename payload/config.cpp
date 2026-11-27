@@ -1,5 +1,7 @@
 #include "config.hpp"
 #include "../common/log.h"
+#include "../common/bootstrap.h"
+#include "overlay_fs.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -224,8 +226,15 @@ bool config_load(OverlayConfig* cfg, const char* path) {
     config_set_defaults(cfg);
     if (!path) return false;
 
-    long fd = __syscall(SYS_open, path, O_RDONLY, 0);
+    // 1. Echtes /data/overlay/config.ini (ueber den Verzeichnis-Deskriptor des Loaders)
+    long fd = -1;
     const char* loaded_path = path;
+    if (overlay_fs_has_real_dir()) {
+        fd = overlay_fs_open(OVERLAY_CONFIG_NAME, nullptr, O_RDONLY, 0);
+        if (fd >= 0) loaded_path = OVERLAY_DATA_DIR "/" OVERLAY_CONFIG_NAME " (echtes Dateisystem)";
+    }
+    // 2. Bisherige Pfade (nur in der Sandbox von SceShellUI sichtbar)
+    if (fd < 0) fd = __syscall(SYS_open, path, O_RDONLY, 0);
     if (fd < 0) {
         fd = __syscall(SYS_open, "/data/ps5_overlay.ini", O_RDONLY, 0);
         if (fd >= 0) {
@@ -239,7 +248,7 @@ bool config_load(OverlayConfig* cfg, const char* path) {
         }
     }
     if (fd < 0) {
-        LOG_INFO("Config file not found on disk. Creating initial default at %s...", path);
+        LOG_INFO("Keine Config gefunden. Lege Standard-Config an (%s)...", path);
         config_save(cfg, path);
         return false;
     }
@@ -397,17 +406,28 @@ bool config_load(OverlayConfig* cfg, const char* path) {
 bool config_save(const OverlayConfig* cfg, const char* path) {
     if (!cfg || !path) return false;
 
-    // Ensure all target directories exist
-    __syscall(SYS_mkdir, "/data", 0777);
-    __syscall(SYS_mkdir, "/data/overlay", 0777);
-    __syscall(SYS_chmod, "/data/overlay", 0777);
-    __syscall(SYS_mkdir, "/user/data", 0777);
-    __syscall(SYS_mkdir, "/user/data/overlay", 0777);
-    __syscall(SYS_chmod, "/user/data/overlay", 0777);
+    const bool real_dir = overlay_fs_has_real_dir();
+    if (!real_dir) {
+        // Ohne Deskriptor des Loaders bleibt nur der Sandbox-Pfad (nicht dauerhaft!)
+        __syscall(SYS_mkdir, "/data", 0777);
+        __syscall(SYS_mkdir, "/data/overlay", 0777);
+        __syscall(SYS_chmod, "/data/overlay", 0777);
+        __syscall(SYS_mkdir, "/user/data", 0777);
+        __syscall(SYS_mkdir, "/user/data/overlay", 0777);
+        __syscall(SYS_chmod, "/user/data/overlay", 0777);
+    }
 
     char buf[2048];
     int len = 0;
-    len += snprintf(buf + len, sizeof(buf) - len,
+    // Haengt formatierten Text an, ohne ueber das Pufferende hinauszuschreiben
+#define CFG_APPEND(...) do { \
+        if (len < (int)sizeof(buf) - 1) { \
+            int n_ = snprintf(buf + len, sizeof(buf) - (size_t)len, __VA_ARGS__); \
+            if (n_ > 0) len += n_; \
+            if (len > (int)sizeof(buf) - 1) len = (int)sizeof(buf) - 1; \
+        } \
+    } while (0)
+    CFG_APPEND(
         "[overlay]\n"
         "enabled = %s\n"
         "pos_v = %s\n"
@@ -438,13 +458,13 @@ bool config_save(const OverlayConfig* cfg, const char* path) {
     for (int i = 0; i < METRIC_COUNT; i++) {
         MetricType mt = (MetricType)cfg->order[i];
         if (mt < 0 || mt >= METRIC_COUNT) continue;
-        len += snprintf(buf + len, sizeof(buf) - len, "%s%s", (i > 0) ? "," : "", metric_type_to_str(mt));
+        CFG_APPEND("%s%s", (i > 0) ? "," : "", metric_type_to_str(mt));
     }
-    len += snprintf(buf + len, sizeof(buf) - len, "\n\n");
+    CFG_APPEND("\n\n");
 
     for (int i = 0; i < METRIC_COUNT; i++) {
         MetricType mt = (MetricType)i;
-        len += snprintf(buf + len, sizeof(buf) - len,
+        CFG_APPEND(
             "[%s]\n"
             "enabled = %s\n"
             "color = %s\n\n",
@@ -454,24 +474,35 @@ bool config_save(const OverlayConfig* cfg, const char* path) {
         );
     }
 
-    long fd = __syscall(SYS_open, path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+#undef CFG_APPEND
+
+    long fd = -1;
+    if (real_dir) {
+        fd = overlay_fs_open(OVERLAY_CONFIG_NAME, nullptr, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd < 0) LOG_WARN("Schreiben ins echte %s fehlgeschlagen (fd=%ld), nutze Sandbox-Pfad", OVERLAY_DATA_DIR, fd);
+    }
+    const bool saved_real = (fd >= 0);
+    if (fd < 0) fd = __syscall(SYS_open, path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd >= 0) {
         __syscall(SYS_write, fd, buf, len);
         __syscall(SYS_fsync, fd);
         __syscall(SYS_close, fd);
-        LOG_INFO("Config saved successfully to %s", path);
+        if (saved_real) {
+            LOG_INFO("Config gespeichert: %s/%s (echtes Dateisystem, per FTP sichtbar)", OVERLAY_DATA_DIR, OVERLAY_CONFIG_NAME);
+        } else {
+            LOG_WARN("Config nur in der Sandbox von SceShellUI gespeichert (%s). Sie geht beim Neustart verloren!", path);
+        }
     } else {
-        LOG_ERROR("Failed to open %s for writing (fd=%ld)", path, fd);
+        LOG_ERROR("Config konnte nicht gespeichert werden: %s (fd=%ld)", path, fd);
     }
 
-    // Mirror to /data/ps5_overlay.ini as a guaranteed root fallback
-    if (strcmp(path, "/data/ps5_overlay.ini") != 0) {
+    // Spiegelkopie nur ohne echtes Verzeichnis (sonst unnoetig)
+    if (!saved_real && strcmp(path, "/data/ps5_overlay.ini") != 0) {
         long mfd = __syscall(SYS_open, "/data/ps5_overlay.ini", O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (mfd >= 0) {
             __syscall(SYS_write, mfd, buf, len);
             __syscall(SYS_fsync, mfd);
             __syscall(SYS_close, mfd);
-            LOG_INFO("Config mirror backup saved to /data/ps5_overlay.ini");
         }
     }
 

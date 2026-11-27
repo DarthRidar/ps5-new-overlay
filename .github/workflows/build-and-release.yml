@@ -126,7 +126,8 @@ jobs:
           tag_name: ${{ steps.vars.outputs.tag }}
           name: PS5 In-Game Overlay ${{ steps.vars.outputs.tag }}
           draft: false
-          prerelease: false
+          # Tags mit Bindestrich (z. B. v1.1.0-beta.1) werden als Beta/Pre-Release veroeffentlicht
+          prerelease: ${{ contains(steps.vars.outputs.tag, '-') }}
           generate_release_notes: true
           body: |
             ## 🎮 PS5 In-Game Overlay ${{ steps.vars.outputs.tag }}
@@ -151,7 +152,7 @@ jobs:
               - Full remote control via browser at `http://<PS5_IP>:8585`
               - Live preview, reorder metrics, custom colors (HEX/Picker), position & offset adjustments
               - Graceful overlay unloader to quit without restarting console
-            - **Persistent Config**: Automatically saved to `/data/overlay/config.ini`
+            - **Persistent Config**: Automatically saved to the real `/data/overlay/config.ini` (visible via FTP)
 
             ### 🚀 Quick Start
             Send the ELF binary to your jailbroken PS5 via port 9020 or 9021:

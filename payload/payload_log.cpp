@@ -1,4 +1,6 @@
 #include "../common/log.h"
+#include "../common/bootstrap.h"
+#include "overlay_fs.hpp"
 #include <stdio.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -12,6 +14,7 @@ __attribute__((section(".data"))) static int s_payload_log_init = 0;
 
 extern "C" void overlay_log_init(void) {
     if (s_payload_log_init || !ptr_syscall) return;
+    if (overlay_fs_has_real_dir()) { s_payload_log_init = 1; return; }
     // SYS_mkdir = 136, SYS_chmod = 15
     __syscall(136, "/data", 0777);
     __syscall(136, "/data/overlay", 0777);
@@ -59,8 +62,18 @@ extern "C" void overlay_log(const char* level, const char* fmt, ...) {
 
     // 2. Write to disk files via direct kernel syscall
     overlay_log_init();
-    payload_write_file("/data/overlay/overlay.log", line, (size_t)line_len);
-    payload_write_file("/data/overlay/log.txt", line, (size_t)line_len);
-    payload_write_file("/user/data/overlay/overlay.log", line, (size_t)line_len);
+    if (overlay_fs_has_real_dir()) {
+        // Echtes /data/overlay/overlay.log (dieselbe Datei, in die auch der Loader schreibt)
+        long fd = overlay_fs_open(OVERLAY_LOG_NAME, nullptr, 0x0209 /* O_WRONLY|O_CREAT|O_APPEND */, 0666);
+        if (fd >= 0) {
+            __syscall(4, fd, line, (size_t)line_len);
+            __syscall(6, fd);
+        }
+    } else {
+        // Ohne Deskriptor des Loaders landen diese Dateien nur in der Sandbox von SceShellUI
+        payload_write_file("/data/overlay/overlay.log", line, (size_t)line_len);
+        payload_write_file("/data/overlay/log.txt", line, (size_t)line_len);
+        payload_write_file("/user/data/overlay/overlay.log", line, (size_t)line_len);
+    }
     payload_write_file("/system_tmp/ps5_overlay.log", line, (size_t)line_len);
 }

@@ -1,6 +1,6 @@
 # PS5 Overlay (KUS Edition) 🎮⚡
 
-🇷🇺 [Русская версия README](README_RU.md)
+🇷🇺 [Русская версия README](README_RU.md) · 🇩🇪 [Deutsche Version](README_DE.md)
 
 **PS5 In-Game Telemetry Overlay** is a standalone, lightweight real-time performance and system telemetry in-game overlay for **PlayStation 5 (Jailbreak)**.
 
@@ -141,11 +141,11 @@ port = 8585
 [metrics]
 order = fps,cpu,load,cclk,gpu,gclk,ram,vram,ssd,fan,pwr,ip
 
-[metric_fps]
+[fps]
 enabled = true
 color = #FFEB3B
 
-[metric_ssd]
+[ssd]
 enabled = true
 color = #00E5FF
 ...
