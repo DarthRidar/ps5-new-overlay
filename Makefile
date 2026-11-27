@@ -22,7 +22,7 @@ endif
 
 BIN_DIR     := bin
 PAYLOAD_ELF := $(BIN_DIR)/overlay_payload.elf
-VERSION     ?= v1.1.0-beta.1
+VERSION     ?= v1.1.0-beta.2
 LOADER_ELF  := $(BIN_DIR)/ps5-overlay-kus_$(VERSION).elf
 
 # Flags
