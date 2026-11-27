@@ -39,7 +39,12 @@ jobs:
 
       - name: Install build tools and compiler
         run: |
-          sudo apt-get update
+          # Der GitHub-Runner bringt vorinstallierte Fremd-Paketquellen mit (z. B.
+          # packages.microsoft.com). Fallen die mit 403/Fehler aus, bricht ein striktes
+          # "apt-get update" komplett ab (exit 100) und der Build scheitert, obwohl wir
+          # diese Quellen gar nicht brauchen. Deshalb entfernen und Update tolerant machen.
+          sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure* 2>/dev/null || true
+          sudo apt-get update || sudo apt-get update || true
           sudo apt-get install -y --no-install-recommends \
             git wget unzip make \
             clang-18 lld-18 llvm-18 llvm-18-dev \
