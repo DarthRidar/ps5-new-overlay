@@ -2,6 +2,12 @@
 
 #include <stdint.h>
 
+// Gemeinsame Pfade (echtes Dateisystem der Konsole)
+#define OVERLAY_DATA_DIR     "/data/overlay"
+#define OVERLAY_CONFIG_NAME  "config.ini"
+#define OVERLAY_STATUS_NAME  "running.txt"   // Inhalt: "<pid> <port>\n", solange das Overlay laeuft
+#define OVERLAY_LOG_NAME     "overlay.log"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -60,6 +66,12 @@ typedef struct {
     uint64_t mono_thread_attach;
     uint64_t mono_thread_current;
     uint64_t mono_thread_detach;
+
+    // Verzeichnis-Deskriptor fuer das echte /data/overlay (vom Loader per rdup in SceShellUI
+    // eingeschleust). SceShellUI laeuft in einer Sandbox, in der "/data" NICHT das echte
+    // /data der Konsole ist. Ueber diesen Deskriptor (openat) landen Config, Log und
+    // Statusdatei dort, wo man sie per FTP sieht. -1 = nicht verfuegbar.
+    int32_t data_dirfd;
 } PayloadBootstrapArgs;
 
 #ifdef __cplusplus

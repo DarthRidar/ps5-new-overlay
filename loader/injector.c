@@ -10,6 +10,8 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 static uint32_t find_module_by_substring(pid_t pid, const char* substr, uint64_t* out_mapbase) {
     intptr_t kproc = kernel_get_proc(pid);
@@ -411,6 +413,31 @@ bool inject_elf_into_pid(pid_t pid, void* elf_data) {
     LOG_INFO("Hardware symbols: soc_clk=0x%lx, soc_pwr=0x%lx, cpu_core_clk=0x%lx, cpu_freq=0x%lx",
              (unsigned long)p_args.sceKernelGetSocClock, (unsigned long)p_args.sceKernelGetSocPowerConsumption,
              (unsigned long)p_args.sceKernelGetCpuCoreClock, (unsigned long)p_args.sceKernelGetCpuFrequency);
+
+    // 8. Echtes /data/overlay als Verzeichnis-Deskriptor an SceShellUI uebergeben.
+    //    SceShellUI laeuft in einer Sandbox (eigenes Root-Verzeichnis). Dateien, die der
+    //    Payload dort unter "/data/overlay/..." anlegt, landen NICHT im echten /data und
+    //    sind nach einem Neustart von SceShellUI weg. Ein offener Verzeichnis-Deskriptor
+    //    aus dem Loader (der ohne Sandbox laeuft) erlaubt dem Payload per openat() den
+    //    Zugriff auf den echten Ordner, ohne die Sandbox von SceShellUI zu veraendern.
+    p_args.data_dirfd = -1;
+    {
+        int local_dirfd = open(OVERLAY_DATA_DIR, O_RDONLY | O_DIRECTORY);
+        if (local_dirfd >= 0) {
+            int remote_dirfd = pt_rdup(pid, getpid(), local_dirfd);
+            close(local_dirfd);
+            if (remote_dirfd >= 0) {
+                p_args.data_dirfd = remote_dirfd;
+                LOG_INFO("%s an SceShellUI uebergeben (remote fd=%d)", OVERLAY_DATA_DIR, remote_dirfd);
+            } else {
+                LOG_WARN("pt_rdup fuer %s fehlgeschlagen (rc=%d). Config wird nur in der Sandbox gespeichert!",
+                         OVERLAY_DATA_DIR, remote_dirfd);
+            }
+        } else {
+            LOG_WARN("Konnte %s nicht oeffnen (errno=%d). Config wird nur in der Sandbox gespeichert!",
+                     OVERLAY_DATA_DIR, errno);
+        }
+    }
 
     uint64_t remote_args = pt_mmap(pid, 0, sizeof(PayloadBootstrapArgs), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if (!remote_args || remote_args == (uint64_t)-1) {

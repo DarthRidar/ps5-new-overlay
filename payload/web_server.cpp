@@ -1,5 +1,6 @@
 #include "web_server.hpp"
 #include "config.hpp"
+#include "overlay_fs.hpp"
 #include "../common/log.h"
 #include <cstdio>
 #include <cstdlib>
@@ -50,7 +51,7 @@ struct bsd_timeval {
 // Embedded HTML/CSS/JS Page
 // ---------------------------------------------------------------------------
 static const char s_html_page[] = R"rawhtml(<!DOCTYPE html>
-<html lang="ru">
+<html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -500,19 +501,19 @@ input[type="range"]::-webkit-slider-thumb {
   <div class="header">
     <div class="title-group">
       <h1>🎮 PS5 Telemetry Overlay</h1>
-      <p>Панель управления и настройка отображения оверлея</p>
+      <p>Steuerung und Anzeigeeinstellungen des Overlays</p>
     </div>
     <div class="status-pill">
       <span class="status-dot"></span>
-      <span>PS5 ShellUI (v1.0.19)</span>
+      <span>PS5 ShellUI (v1.1.0-beta.1)</span>
     </div>
   </div>
 
   <!-- Live Screen Preview -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">🖥️ Предпросмотр на экране PS5</div>
-      <div style="font-size: 13px; color: var(--text-dim);">Масштаб 16:9</div>
+      <div class="card-title">🖥️ Vorschau auf dem PS5-Bildschirm</div>
+      <div style="font-size: 13px; color: var(--text-dim);">Format 16:9</div>
     </div>
     <div class="preview-container" id="previewContainer">
       <div class="preview-screen-label">PLAYSTATION 5</div>
@@ -523,8 +524,8 @@ input[type="range"]::-webkit-slider-thumb {
   <!-- Telemetry Metrics & Order -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">📊 Данные телеметрии и их порядок</div>
-      <div style="font-size: 13px; color: var(--text-dim);">Используйте ▲ / ▼ для сортировки</div>
+      <div class="card-title">📊 Telemetriedaten und Reihenfolge</div>
+      <div style="font-size: 13px; color: var(--text-dim);">Mit ▲ / ▼ sortieren</div>
     </div>
     <div class="metrics-list" id="metricsList"></div>
   </div>
@@ -532,34 +533,34 @@ input[type="range"]::-webkit-slider-thumb {
   <!-- Screen Position -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">📍 Расположение на экране</div>
+      <div class="card-title">📍 Position auf dem Bildschirm</div>
     </div>
     <div class="grid-2">
       <div class="form-group">
-        <label class="form-label">По вертикали</label>
+        <label class="form-label">Vertikal</label>
         <div class="segment-group" id="posVSegment">
-          <button type="button" class="segment-btn active" data-val="0">Сверху</button>
-          <button type="button" class="segment-btn" data-val="1">Снизу</button>
+          <button type="button" class="segment-btn active" data-val="0">Oben</button>
+          <button type="button" class="segment-btn" data-val="1">Unten</button>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">По горизонтали</label>
+        <label class="form-label">Horizontal</label>
         <div class="segment-group" id="posHSegment">
-          <button type="button" class="segment-btn active" data-val="0">Слева</button>
-          <button type="button" class="segment-btn" data-val="1">По центру</button>
-          <button type="button" class="segment-btn" data-val="2">Справа</button>
+          <button type="button" class="segment-btn active" data-val="0">Links</button>
+          <button type="button" class="segment-btn" data-val="1">Mitte</button>
+          <button type="button" class="segment-btn" data-val="2">Rechts</button>
         </div>
       </div>
       <div class="form-group">
         <div class="form-label">
-          <span>Смещение по X</span>
+          <span>Versatz X</span>
           <span class="form-val" id="valOffsetX">24 px</span>
         </div>
         <input type="range" id="inputOffsetX" min="0" max="400" step="4" value="24">
       </div>
       <div class="form-group">
         <div class="form-label">
-          <span>Смещение по Y</span>
+          <span>Versatz Y</span>
           <span class="form-val" id="valOffsetY">0 px</span>
         </div>
         <input type="range" id="inputOffsetY" min="0" max="200" step="2" value="0">
@@ -570,32 +571,32 @@ input[type="range"]::-webkit-slider-thumb {
   <!-- Appearance & Styling -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">🎨 Внешний вид и размер</div>
+      <div class="card-title">🎨 Aussehen und Größe</div>
     </div>
     <div class="grid-2">
       <div class="form-group">
         <div class="form-label">
-          <span>Размер шрифта</span>
+          <span>Schriftgröße</span>
           <span class="form-val" id="valFontSize">18 pt</span>
         </div>
         <input type="range" id="inputFontSize" min="12" max="32" step="1" value="18">
       </div>
       <div class="form-group">
         <div class="form-label">
-          <span>Высота плашки</span>
+          <span>Leistenhöhe</span>
           <span class="form-val" id="valBarHeight">34 px</span>
         </div>
         <input type="range" id="inputBarHeight" min="24" max="56" step="2" value="34">
       </div>
       <div class="form-group">
         <div class="form-label">
-          <span>Прозрачность фона</span>
+          <span>Hintergrund-Deckkraft</span>
           <span class="form-val" id="valBgOpacity">70%</span>
         </div>
         <input type="range" id="inputBgOpacity" min="0" max="100" step="5" value="70">
       </div>
       <div class="form-group">
-        <label class="form-label">Цвет фоновой плашки</label>
+        <label class="form-label">Hintergrundfarbe der Leiste</label>
         <div class="color-input-wrapper">
           <input type="color" id="inputBgColor" value="#000000">
           <input type="text" class="color-hex" id="inputBgColorHex" value="#000000" maxlength="7">
@@ -611,39 +612,39 @@ input[type="range"]::-webkit-slider-thumb {
   <!-- Unload / Exit Overlay Card -->
   <div class="card" style="border-color: rgba(255, 75, 75, 0.35); background: linear-gradient(180deg, #1c151b 0%, #151b26 100%);">
     <div class="card-header">
-      <div class="card-title" style="color: #ff5252;">🛑 Завершение и выгрузка оверлея</div>
+      <div class="card-title" style="color: #ff5252;">🛑 Overlay beenden und entladen</div>
     </div>
     <p style="font-size: 14px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px;">
-      Полностью выгружает модуль оверлея из памяти SceShellUI, удаляет HUD с экрана и освобождает сетевой порт. После выгрузки можно запустить новую версию ELF через Netcat без перезагрузки консоли.
+      Entlädt das Overlay-Modul vollständig aus dem Speicher von SceShellUI, entfernt das HUD vom Bildschirm und gibt den Netzwerkport frei. Danach kannst du eine neue ELF-Version per Netcat senden, ohne die Konsole neu zu starten.
     </p>
     <button type="button" class="btn-unload" id="btnUnload" onclick="unloadOverlay()">
-      ⚠️ Выгрузить оверлей из SceShellUI
+      ⚠️ Overlay aus SceShellUI entladen
     </button>
   </div>
 
   <!-- Action Bar -->
   <div class="action-bar">
-    <button class="btn-save" id="btnSave">💾 Сохранить и применить на PS5</button>
-    <button class="btn-reset" id="btnReset">↺ По умолчанию</button>
+    <button class="btn-save" id="btnSave">💾 Speichern und auf PS5 anwenden</button>
+    <button class="btn-reset" id="btnReset">↺ Standardwerte</button>
   </div>
 </div>
 
-<div class="toast" id="toast">Настройки успешно применены!</div>
+<div class="toast" id="toast">Einstellungen übernommen!</div>
 
 <script>
 const METRIC_DEFS = {
-  fps:  { name: 'FPS',  desc: 'Частота кадров в секунду (Framerate)', demoVal: '120' },
-  cpu:  { name: 'CPU',  desc: 'Температура процессора (Zen 2 Tctl)', demoVal: '62°C' },
-  load: { name: 'LOAD', desc: 'Общая загрузка процессора (CPU %)', demoVal: '28%' },
-  cclk: { name: 'CCLK', desc: 'Частота ядер процессора (Zen 2 CPU Clock)', demoVal: '3500 MHz' },
-  gpu:  { name: 'GPU',  desc: 'Температура видеочипа (SoC / GPU)', demoVal: '66°C' },
-  gclk: { name: 'GCLK', desc: 'Частота видеоядра (RDNA 2 GFXCLK)', demoVal: '2233 MHz' },
-  ram:  { name: 'RAM',  desc: 'Использование системной памяти', demoVal: '4.8/16 GB' },
-  vram: { name: 'VRAM', desc: 'Использование видеопамяти (VRAM)', demoVal: '3.4 GB' },
-  ssd:  { name: 'SSD',  desc: 'Температура накопителя M.2 NVMe SSD', demoVal: '44°C' },
-  fan:  { name: 'FAN',  desc: 'Скорость вращения кулера консоли', demoVal: '38%' },
-  pwr:  { name: 'PWR',  desc: 'Энергопотребление SoC APU в Ваттах', demoVal: '185 W' },
-  ip:   { name: 'IP',   desc: 'Локальный IP-адрес консоли', demoVal: '192.168.1.105' }
+  fps:  { name: 'FPS',  desc: 'Bilder pro Sekunde (Framerate)', demoVal: '120' },
+  cpu:  { name: 'CPU',  desc: 'CPU-Temperatur (Zen 2 Tctl)', demoVal: '62°C' },
+  load: { name: 'LOAD', desc: 'Gesamte CPU-Auslastung (CPU %)', demoVal: '28%' },
+  cclk: { name: 'CCLK', desc: 'CPU-Kerntakt (Zen 2 CPU Clock)', demoVal: '3500 MHz' },
+  gpu:  { name: 'GPU',  desc: 'GPU-Temperatur (SoC / GPU)', demoVal: '66°C' },
+  gclk: { name: 'GCLK', desc: 'GPU-Takt (RDNA 2 GFXCLK)', demoVal: '2233 MHz' },
+  ram:  { name: 'RAM',  desc: 'Belegung des Arbeitsspeichers', demoVal: '4.8/16 GB' },
+  vram: { name: 'VRAM', desc: 'Belegung des Grafikspeichers (VRAM)', demoVal: '3.4 GB' },
+  ssd:  { name: 'SSD',  desc: 'Temperatur der M.2-NVMe-SSD', demoVal: '44°C' },
+  fan:  { name: 'FAN',  desc: 'Lüfterdrehzahl der Konsole', demoVal: '38%' },
+  pwr:  { name: 'PWR',  desc: 'Leistungsaufnahme der SoC-APU in Watt', demoVal: '185 W' },
+  ip:   { name: 'IP',   desc: 'Lokale IP-Adresse der Konsole', demoVal: '192.168.1.105' }
 };
 
 let currentConfig = {
@@ -944,7 +945,7 @@ async function saveConfigToServer() {
   if (btn && btn.disabled) return;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '⏳ Сохранение...';
+    btn.textContent = '⏳ Speichern...';
   }
   try {
     const res = await fetch('/api/config', {
@@ -953,29 +954,29 @@ async function saveConfigToServer() {
       body: JSON.stringify(currentConfig)
     });
     if (res.ok) {
-      showToast('Настройки успешно применены на PS5!');
+      showToast('Einstellungen auf der PS5 übernommen!');
     } else {
-      showToast('Ошибка сохранения: ' + res.status);
+      showToast('Fehler beim Speichern: ' + res.status);
     }
   } catch (err) {
-    showToast('Ошибка сети при сохранении');
+    showToast('Netzwerkfehler beim Speichern');
   } finally {
     if (btn) {
       setTimeout(() => {
         btn.disabled = false;
-        btn.textContent = '💾 Сохранить и применить на PS5';
+        btn.textContent = '💾 Speichern und auf PS5 anwenden';
       }, 600);
     }
   }
 }
 
 async function resetConfig() {
-  if (!confirm('Сбросить все настройки оверлея по умолчанию?')) return;
+  if (!confirm('Alle Overlay-Einstellungen auf Standardwerte zurücksetzen?')) return;
   try {
     const res = await fetch('/api/reset', { method: 'POST' });
     if (res.ok) {
       await loadConfigFromServer();
-      showToast('Настройки сброшены по умолчанию!');
+      showToast('Einstellungen auf Standardwerte zurückgesetzt!');
       return;
     }
   } catch (err) {}
@@ -1000,28 +1001,28 @@ async function resetConfig() {
     }
   };
   syncInputsFromConfig();
-  showToast('Сброшено по умолчанию');
+  showToast('Auf Standardwerte zurückgesetzt');
 }
 
 async function unloadOverlay() {
-  if (!confirm('Вы уверены, что хотите завершить и выгрузить оверлей из памяти SceShellUI?\n\nHUD исчезнет с экрана, а сетевой порт освободится для загрузки нового ELF.')) return;
+  if (!confirm('Overlay wirklich beenden und aus dem Speicher von SceShellUI entladen?\n\nDas HUD verschwindet vom Bildschirm und der Netzwerkport wird für ein neues ELF frei.')) return;
   const btn = document.getElementById('btnUnload');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '⏳ Выгрузка...';
+    btn.textContent = '⏳ Wird entladen...';
   }
   try {
     await fetch('/api/unload', { method: 'POST' });
-    showToast('Оверлей успешно выгружен!');
+    showToast('Overlay erfolgreich entladen!');
     setTimeout(() => {
       document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#fff;text-align:center;padding:24px;font-family:sans-serif;">' +
         '<div style="font-size:48px;margin-bottom:16px;">🛑</div>' +
-        '<h1 style="color:#00e676;margin-bottom:12px;font-size:24px;">Оверлей успешно выгружен</h1>' +
-        '<p style="color:#8b9bb4;max-width:540px;font-size:16px;line-height:1.5;">Модуль оверлея завершил работу в SceShellUI. Память очищена, порт освобожден.<br><br>Теперь можно отправить новую версию ELF через Netcat / Payload Sender без перезагрузки консоли.</p>' +
+        '<h1 style="color:#00e676;margin-bottom:12px;font-size:24px;">Overlay erfolgreich entladen</h1>' +
+        '<p style="color:#8b9bb4;max-width:540px;font-size:16px;line-height:1.5;">Das Overlay-Modul wurde in SceShellUI beendet. Speicher und Port sind freigegeben.<br><br>Du kannst jetzt eine neue ELF-Version per Netcat / Payload Sender senden, ohne die Konsole neu zu starten.</p>' +
         '</div>';
     }, 1000);
   } catch (err) {
-    showToast('Запрос на выгрузку отправлен!');
+    showToast('Anfrage zum Entladen gesendet!');
   }
 }
 
@@ -1407,6 +1408,8 @@ static void* web_server_worker(void* arg) {
         return nullptr;
     }
     g_web_running = true;
+    // Statusdatei fuer den Loader (Erkennung laufender Instanz + tatsaechlicher Port)
+    overlay_fs_write_status(actual_port);
 
     while (g_web_running) {
         struct bsd_sockaddr_in client_addr;

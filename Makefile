@@ -22,7 +22,7 @@ endif
 
 BIN_DIR     := bin
 PAYLOAD_ELF := $(BIN_DIR)/overlay_payload.elf
-VERSION     ?= v1.0.19
+VERSION     ?= v1.1.0-beta.1
 LOADER_ELF  := $(BIN_DIR)/ps5-overlay-kus_$(VERSION).elf
 
 # Flags
@@ -38,6 +38,7 @@ PAYLOAD_SRCS := payload/mono_runtime.cpp \
                 payload/config.cpp \
                 payload/web_server.cpp \
                 payload/payload_log.cpp \
+                payload/overlay_fs.cpp \
                 common/nid.c
 
 LOADER_SRCS  := loader/main.c \

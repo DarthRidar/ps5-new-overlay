@@ -3,6 +3,7 @@
 #include "../common/bootstrap.h"
 #include "config.hpp"
 #include "web_server.hpp"
+#include "overlay_fs.hpp"
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
@@ -840,7 +841,7 @@ static void* payload_thread_main(void* arg) {
     }
 
     // Signal readiness via /system_tmp/ps5_overlay_ready
-    long rfd = __syscall(5, "/system_tmp/ps5_overlay_ready", 0x0209 /* O_WRONLY|O_CREAT|O_TRUNC */, 0666);
+    long rfd = __syscall(5, "/system_tmp/ps5_overlay_ready", 0x0601 /* O_WRONLY|O_CREAT|O_TRUNC */, 0666);
     if (rfd >= 0) {
         char pid_str[16];
         int plen = snprintf(pid_str, sizeof(pid_str), "%d\n", pid);
@@ -880,6 +881,7 @@ static void* payload_thread_main(void* arg) {
             web_server_stop();
             __syscall(10 /* SYS_unlink */, "/system_tmp/ps5_overlay_ready");
             LOG_INFO("PS5 Overlay payload thread exiting cleanly.");
+            overlay_fs_shutdown();
             return nullptr;
         }
 
